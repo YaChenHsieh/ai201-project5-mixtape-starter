@@ -284,3 +284,6 @@ After removing the slice, I checked related functionality to confirm no other en
 - Verified the song order in the response still matches `pe.position ASC` in the database, confirming the fix only affects which items are included, not their ordering.
 - Checked `POST /playlists/<playlist_id>/songs` (`add_song`) still works and that a newly appended song is now visible via `get_songs`, since it's the last entry and was previously the one being dropped.
 - Confirmed `get_playlist_songs()` is not reused elsewhere (e.g., in notification or feed services) in a way that relied on the truncated list, so no other feature depended on the missing-last-song behavior.
+
+## Commit History
+![Commit history](./img/commitHistory.png)
