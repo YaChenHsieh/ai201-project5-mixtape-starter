@@ -145,7 +145,7 @@ The condition for the "listened yesterday" case also checks the current weekday:
 and today.weekday() != 6
 ```
 
-This condition is unrelated to whether the user listened yesterday. When the condition evaluates to `False`, the code skips the increment branch and resets the listening streak.
+`today.weekday()` returns `6` specifically on Sundays (Python's `Monday=0 ... Sunday=6` convention), so this extra clause only evaluates to `False` — and only breaks the increment branch — on Sundays, which is exactly the day the reported bug (and the failing Saturday-to-Sunday test) manifested on. On every other day of the week the clause is `True` and the streak increments normally, which is why the bug looked intermittent rather than constant. Correct streak behavior only depends on whether `last_listened_date == yesterday`; the current calendar weekday has no bearing on that comparison, so tying the increment to `today.weekday()` was never a valid proxy for "did the user listen on consecutive days" — it just happened to coincide with the right answer six days out of seven.
 
 #### Fix
 
@@ -157,6 +157,14 @@ if last_listened_date == yesterday:
 ```
 
 This allows the streak to increment correctly on every day of the week.
+
+#### Side-Effect Check
+
+After removing the weekday condition, I re-checked related functionality to make sure the rest of the streak logic still behaved correctly:
+- Re-ran the same-day case (listening twice in one day) to confirm the streak does not double-increment, since that branch is separate from the one I changed.
+- Re-ran the "gap of 2+ days" case (listened 3+ days ago) to confirm the streak still correctly resets to 1, since that branch was untouched.
+- Verified `GET /users/<user_id>/streak` still returns the same value as `user.listening_streak` in the database after each listen event.
+- Confirmed `last_listened_at` is still updated correctly on every call regardless of day, since that assignment sits outside the modified condition.
 
 ---
 
@@ -184,7 +192,7 @@ I followed the feed endpoint from `routes/feed.py` into `get_friends_listening_n
 
 #### Root Cause
 
-The service only subtracts `RECENT_THRESHOLD` from the current time. For example, a 24-hour threshold can include listening events from yesterday, even though the endpoint is intended to show friends who listened today.
+`get_friends_listening_now()` computes a single cutoff, `datetime.now(timezone.utc) - RECENT_THRESHOLD` (a rolling 24-hour window), and filters `ListeningEvent.listened_at >= cutoff`. That cutoff only diverges from "today" near the edges of the calendar day: if the current time is, say, 2 AM, the 24-hour window reaches back past midnight into yesterday, so an event from 11 PM yesterday (23:00) still satisfies `listened_at >= cutoff` and is misclassified as "listening now." Earlier in the day (e.g., 6 PM), the rolling window and calendar day mostly overlap, which is why the bug wasn't visible in every test run — it depends on what time the request is made relative to midnight. The endpoint's intent is "who is listening today," which is a calendar-day concept, not a rolling-duration concept, so a single `now - RECENT_THRESHOLD` cutoff can never correctly express it — the fix requires combining it with an explicit `today_start` boundary and taking the later (more restrictive) of the two.
 
 #### Fix
 
@@ -204,6 +212,14 @@ ListeningEvent.listened_at >= cutoff
 ```
 
 This ensures that returned events are both recent enough and from the current day.
+
+#### Side-Effect Check
+
+After changing the cutoff logic, I checked related functionality that shares the same filtering pattern or data:
+- Re-ran `GET /feed/<user_id>/listening-now` for a friend who listened earlier today (within `RECENT_THRESHOLD`) to confirm they still correctly appear — the fix only tightens the cutoff for events older than today, it doesn't exclude legitimate same-day events.
+- Re-ran the case where a friend listened more than 24 hours ago (previous day) to confirm they are now correctly excluded.
+- Checked `GET /feed/<user_id>/activity` (the friends' recent-history feed) still returns results as before, since it uses a different query path (`get_activity_feed`) and was not touched by this fix.
+- Verified the endpoint still returns 404 for a nonexistent `user_id`, confirming the existing `ValueError` handling in `routes/feed.py` was not affected by the cutoff change.
 
 ### Problem 5: The Last Song in a Playlist Does Not Appear
 
@@ -249,7 +265,7 @@ The function incorrectly used list slicing when converting the songs into dictio
 return [song.to_dict() for song in songs[:-1]]
 ```
 
-In Python, `songs[:-1]` returns every item except the last item. As a result, the final song in the playlist was always excluded from the response.
+In Python, `songs[:-1]` returns every item except the last item. Because this slice is applied to `songs` after it has already been ordered by `position`, the item it drops is always the one with the highest `position` value in the playlist — i.e., specifically the last song added, regardless of playlist length (it even reduces a single-song playlist to an empty list). This is a constant, unconditional truncation rather than a filter on any playlist attribute, which is why every playlist exhibited the bug and none were spared. Correct behavior requires returning one dict per entry in `playlist_entries` for that playlist, so the transformation step must map over the *entire* ordered list — any slice that drops an element breaks the one-to-one correspondence between database rows and response items, which is why `songs[:-1]` had to be replaced with the full `songs` list rather than adjusted.
 
 #### Fix
 
@@ -260,3 +276,11 @@ return [song.to_dict() for song in songs]
 ```
 
 After this change, the endpoint returns all songs in the playlist in ascending position order, including the last song.
+
+#### Side-Effect Check
+
+After removing the slice, I checked related functionality to confirm no other endpoint depends on the old (truncated) behavior:
+- Re-ran `GET /playlists/<playlist_id>/songs` on a playlist with only one song to confirm it now returns that song instead of an empty list, which is the most extreme case of the off-by-one bug.
+- Verified the song order in the response still matches `pe.position ASC` in the database, confirming the fix only affects which items are included, not their ordering.
+- Checked `POST /playlists/<playlist_id>/songs` (`add_song`) still works and that a newly appended song is now visible via `get_songs`, since it's the last entry and was previously the one being dropped.
+- Confirmed `get_playlist_songs()` is not reused elsewhere (e.g., in notification or feed services) in a way that relied on the truncated list, so no other feature depended on the missing-last-song behavior.
