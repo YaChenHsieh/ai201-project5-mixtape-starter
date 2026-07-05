@@ -1,3 +1,11 @@
+## AI Usage
+I used AI as a support tool while debugging and writing this submission.
+
+- I asked AI to summarize `models.py` so I could understand the relationships between models and association tables more quickly.
+- I asked AI to explain each router file at a high level so I could trace how requests flow from routes into services.
+- I asked AI to clarify unfamiliar methods by describing their inputs, outputs, and edge cases, which helped me reason about the code paths.
+- I asked AI for help reproducing bugs when I forgot SQLite query syntax or needed help checking database state during investigation.
+
 ## Model (model.py)
 There are 8 models, plus 3 association tables.
 #### Models: 
@@ -125,6 +133,10 @@ Flow: song → feed
 
 5. Observe that the streak may incorrectly reset to `1` when the weekday condition fails. The original condition specifically fails on Sunday. To reproduce it on another day during testing, temporarily change the weekday value in the condition.
 
+#### How you found the root cause
+
+I traced the issue from the `/songs/<song_id>/listen` route into `record_listening_event()` and then into `update_listening_streak()`. While reading the conditional branches, I noticed that the "listened yesterday" case was not based only on the date difference. The code also required `today.weekday() != 6`, which meant the increment branch could fail on Sundays even when the user had listened on the previous day. That matched the behavior described in the README and explained why the existing Saturday-to-Sunday test was failing.
+
 #### Root Cause
 
 The condition for the "listened yesterday" case also checks the current weekday:
@@ -165,6 +177,10 @@ This allows the streak to increment correctly on every day of the week.
    ```
 
 3. Check the response. A friend whose `last_listened_at` value is from yesterday is incorrectly included in the feed.
+
+#### How you found the root cause
+
+I followed the feed endpoint from `routes/feed.py` into `get_friends_listening_now()` and compared the filtering logic with the issue description in the README. The service used `datetime.now(timezone.utc) - timedelta(hours=24)` as the only cutoff, so any event from yesterday could still appear if it happened within the last 24 hours. That explained why a friend who listened on the previous calendar day could still show up in Friends Listening Now. The seed data also confirmed that the endpoint was filtering by recency rather than by calendar day.
 
 #### Root Cause
 
@@ -220,6 +236,10 @@ This ensures that returned events are both recent enough and from the current da
 4. Compare the endpoint response with the database query result.
 
 5. Observe that the last song in the playlist is missing from the endpoint response.
+
+#### How you found the root cause
+
+I traced the playlist route from `routes/playlists.py` into `get_playlist_songs()` and compared the API response with the rows in `playlist_entries`. The response was always missing exactly one item, which pointed to an off-by-one bug instead of a data problem. When I inspected the service code, I found that it was converting the list with `songs[:-1]`, which always removes the final element. That matched the README symptom and explained why the last song in every playlist never appeared in the response.
 
 #### Root Cause
 
