@@ -188,3 +188,55 @@ ListeningEvent.listened_at >= cutoff
 ```
 
 This ensures that returned events are both recent enough and from the current day.
+
+### Problem 5: The Last Song in a Playlist Does Not Appear
+
+#### Reproduce
+
+1. Query the `playlist` table to identify the available playlists:
+
+   ```bash
+   sqlite3 instance/mixtape.db 'SELECT * FROM playlist;'
+   ```
+
+2. Query the database to check all songs in a specific playlist:
+
+   ```bash
+   sqlite3 instance/mixtape.db "
+   SELECT s.id, s.title, s.artist, pe.position
+   FROM song s
+   JOIN playlist_entries pe ON s.id = pe.song_id
+   WHERE pe.playlist_id = 'YOUR_PLAYLIST_ID_HERE'
+   ORDER BY pe.position ASC;
+   "
+   ```
+
+3. Call the endpoint to retrieve the songs in the playlist:
+
+   ```bash
+   curl http://127.0.0.1:5000/playlists/<playlist-id>/songs
+   ```
+
+4. Compare the endpoint response with the database query result.
+
+5. Observe that the last song in the playlist is missing from the endpoint response.
+
+#### Root Cause
+
+The function incorrectly used list slicing when converting the songs into dictionaries:
+
+```python
+return [song.to_dict() for song in songs[:-1]]
+```
+
+In Python, `songs[:-1]` returns every item except the last item. As a result, the final song in the playlist was always excluded from the response.
+
+#### Fix
+
+Remove the unnecessary list slicing and iterate over the complete `songs` list:
+
+```python
+return [song.to_dict() for song in songs]
+```
+
+After this change, the endpoint returns all songs in the playlist in ascending position order, including the last song.

@@ -1,0 +1,14 @@
+ * Serving Flask app 'app:create_app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [04/Jul/2026 18:30:19] "[33mGET /search/Midnight HTTP/1.1[0m" 404 -
+127.0.0.1 - - [04/Jul/2026 18:31:23] "[33mGET /search?q=Midnight%20Drive HTTP/1.1[0m" 404 -
+127.0.0.1 - - [04/Jul/2026 18:31:53] "GET /songs/search?q=Midnight%20Drive HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jul/2026 18:48:29] "[33mGET /search?q=Still%20Waters HTTP/1.1[0m" 404 -
+127.0.0.1 - - [04/Jul/2026 18:49:07] "GET /songs/search?q=Still%20Waters HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jul/2026 23:28:58] "[33mGET /playlists/5a6a0f79-18da-4389-8090-d27b3c7ed243/aonga HTTP/1.1[0m" 404 -
+127.0.0.1 - - [04/Jul/2026 23:29:04] "GET /playlists/5a6a0f79-18da-4389-8090-d27b3c7ed243/songs HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jul/2026 23:55:02] "GET /playlists/5a6a0f79-18da-4389-8090-d27b3c7ed243/songs HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jul/2026 23:55:28] "GET /playlists/5a6a0f79-18da-4389-8090-d27b3c7ed243/songs HTTP/1.1" 200 -

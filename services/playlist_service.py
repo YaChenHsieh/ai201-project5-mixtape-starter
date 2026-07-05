@@ -62,8 +62,8 @@ def get_playlist_songs(playlist_id: str) -> list[dict]:
         .order_by(asc(playlist_entries.c.position))
         .all()
     )
-
-    return [song.to_dict() for song in songs[:-1]]
+    # Return all songs, including the final song in the playlist
+    return [song.to_dict() for song in songs] # songs[:-1] -> all songs except the last one
 
 
 def get_playlist(playlist_id: str) -> dict:
